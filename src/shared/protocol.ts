@@ -1,7 +1,16 @@
 import { z } from 'zod'
 
 export const protocolVersion = 1 as const
-export const messageTypes = ['session.join', 'queue.add', 'playback.sync', 'error'] as const
+export const messageTypes = [
+  'session.join',
+  'session:join',
+  'session:snapshot',
+  'participant:changed',
+  'session:ended',
+  'queue.add',
+  'playback.sync',
+  'error',
+] as const
 export type MessageType = (typeof messageTypes)[number]
 
 export const websocketEnvelopeSchema = z.object({

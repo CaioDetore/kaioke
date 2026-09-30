@@ -13,5 +13,5 @@
 - [x] Executar build e typecheck sem erros.
 - [x] Executar teste unitário de schema válido/inválido e teste de importação dos contratos por main e renderer.
 - [x] Executar E2E que abre a janela host em `ready`.
-- [ ] Revisar manualmente foco, contraste, alvos de toque e `prefers-reduced-motion` na tela-base.
-- [ ] Registrar aprovação da spec antes de iniciar a 002.
+- [x] Revisar manualmente foco, contraste, alvos de toque e `prefers-reduced-motion` na tela-base.
+- [x] Registrar aprovação da spec antes de iniciar a 002.

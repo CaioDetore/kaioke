@@ -10,6 +10,11 @@ describe('shared contracts', () => {
         getState: async () => ({ phase: 'ready', participantCount: 0 }),
         start: async () => ({ phase: 'ready', participantCount: 0 }),
         stop: async () => ({ phase: 'ready', participantCount: 0 }),
+        getSnapshot: async () => ({ revision: 0, participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } }),
+        removeQueueItem: async () => ({ revision: 0, participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } }),
+        reorderQueueItem: async () => ({ revision: 0, participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } }),
+        playbackCommand: async () => ({ revision: 0, participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } }),
+        toggleFullscreen: async () => false,
         onStateChanged: () => () => undefined,
       },
     }

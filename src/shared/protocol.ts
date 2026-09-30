@@ -6,9 +6,17 @@ export const messageTypes = [
   'session:join',
   'session:snapshot',
   'participant:changed',
+  'profile:update',
   'session:ended',
   'queue.add',
+  'queue.remove',
+  'queue.reorder',
+  'queue:changed',
   'playback.sync',
+  'playback:command',
+  'playback:changed',
+  'skip:vote',
+  'skip:changed',
   'error',
 ] as const
 export type MessageType = (typeof messageTypes)[number]

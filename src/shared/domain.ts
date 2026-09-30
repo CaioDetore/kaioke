@@ -1,4 +1,4 @@
-export type QueueItemStatus = 'queued' | 'playing' | 'played' | 'skipped'
+export type QueueItemStatus = 'queued' | 'playing' | 'played' | 'skipped' | 'failed'
 
 export interface Participant {
   deviceId: string
@@ -14,18 +14,20 @@ export interface QueueItem {
   title?: string
   channelName?: string
   requestedBy: string
+  requestedByName?: string
   createdAt: string
   status: QueueItemStatus
 }
 
 export interface PlaybackState {
   queueItemId?: string
+  status: 'idle' | 'loading' | 'playing' | 'paused'
   positionSeconds: number
-  isPlaying: boolean
+  updatedAt: string
 }
 
 export interface SkipVote {
   queueItemId: string
-  participantId: string
-  createdAt: string
+  voterDeviceIds: string[]
+  threshold: number
 }

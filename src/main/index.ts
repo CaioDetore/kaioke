@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, powerSaveBlocker } from 'electron'
 import path from 'node:path'
 import { SessionServer } from './session-server'
 import { QueueRepository } from './queue-repository'
 
 const isDevelopment = !app.isPackaged
 let sessionServer: SessionServer
+let sleepBlockerId: number | undefined
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -32,10 +33,24 @@ app.whenReady().then(async () => {
   ipcMain.handle('session:get-state', () => sessionServer.getState())
   ipcMain.handle('session:start', () => sessionServer.start())
   ipcMain.handle('session:stop', () => sessionServer.stop())
-  sessionServer.onState(state => BrowserWindow.getAllWindows().forEach(window => window.webContents.send('session:state-changed', state)))
+  ipcMain.handle('session:get-snapshot', () => sessionServer.getSnapshot())
+  ipcMain.handle('session:remove-queue-item', (_event, queueItemId: string) => sessionServer.removeQueueItemAsHost(queueItemId))
+  ipcMain.handle('session:reorder-queue-item', (_event, queueItemId: string, targetIndex: number) => sessionServer.reorderQueueAsHost(queueItemId, targetIndex))
+  ipcMain.handle('session:playback-command', (_event, command) => sessionServer.playbackCommandAsHost(command))
+  ipcMain.handle('session:toggle-fullscreen', event => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return false
+    window.setFullScreen(!window.isFullScreen())
+    return window.isFullScreen()
+  })
+  sessionServer.onState(state => {
+    if (state.phase === 'accepting' && sleepBlockerId === undefined) sleepBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+    if (state.phase !== 'accepting' && sleepBlockerId !== undefined) { powerSaveBlocker.stop(sleepBlockerId); sleepBlockerId = undefined }
+    BrowserWindow.getAllWindows().forEach(window => window.webContents.send('session:state-changed', state))
+  })
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 
-app.on('before-quit', () => { void sessionServer?.stop() })
+app.on('before-quit', () => { if (sleepBlockerId !== undefined) powerSaveBlocker.stop(sleepBlockerId); void sessionServer?.stop() })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

@@ -14,4 +14,6 @@ O servidor mantém `SkipVote { queueItemId, voterDeviceIds }`. Troca de faixa ze
 
 ## UI
 
-Host: player dominante, título em display, controles rotulados, progresso, votos e fila lateral. Participante: cartão de faixa atual, progresso somente leitura, ação de play/pausa quando autorizada e botão de voto; nenhum iframe ou áudio local. Animações de estado são curtas e desativáveis por preferência de redução de movimento.
+Host: player dominante, título em display, controles rotulados, progresso, votos e fila lateral. O modo apresentação ocupa toda a janela para projeção: vídeo central em destaque e faixa inferior com próximas, últimas tocadas e QR code de entrada. `P` alterna a apresentação, `F`/`F11` alterna tela cheia, `C` exibe/oculta os controles na projeção e `Esc` sai da apresentação. Enquanto a sessão estiver aberta, o processo principal bloqueia a suspensão do monitor.
+
+Participante: cartão de faixa atual, progresso somente leitura, ação de play/pausa quando autorizada e botão de voto; nenhum iframe ou áudio local. O formulário de pedido fica desabilitado até a conexão ser confirmada. Animações de estado são curtas e desativáveis por preferência de redução de movimento.

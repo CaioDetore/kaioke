@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const participantSchema = z.object({
   deviceId: z.string().min(1).max(128),
-  displayName: z.string().trim().min(1).max(48),
+  displayName: z.string().trim().min(1).max(32),
   connectedAt: z.string().datetime(),
   isHost: z.boolean(),
 })
@@ -14,18 +14,20 @@ export const queueItemSchema = z.object({
   title: z.string().min(1).optional(),
   channelName: z.string().min(1).optional(),
   requestedBy: z.string().min(1),
+  requestedByName: z.string().trim().min(1).max(32).optional(),
   createdAt: z.string().datetime(),
-  status: z.enum(['queued', 'playing', 'played', 'skipped']),
+  status: z.enum(['queued', 'playing', 'played', 'skipped', 'failed']),
 })
 
 export const playbackStateSchema = z.object({
   queueItemId: z.string().min(1).optional(),
+  status: z.enum(['idle', 'loading', 'playing', 'paused']),
   positionSeconds: z.number().nonnegative(),
-  isPlaying: z.boolean(),
+  updatedAt: z.string().datetime(),
 })
 
 export const skipVoteSchema = z.object({
   queueItemId: z.string().min(1),
-  participantId: z.string().min(1),
-  createdAt: z.string().datetime(),
+  voterDeviceIds: z.array(z.string().min(1)),
+  threshold: z.number().int().nonnegative(),
 })

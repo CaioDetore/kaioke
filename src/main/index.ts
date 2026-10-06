@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, powerSaveBlocker } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker } from 'electron'
 import path from 'node:path'
 import { SessionServer } from './session-server'
 import { QueueRepository } from './queue-repository'
@@ -27,6 +27,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null)
   const repository = await QueueRepository.open(path.join(app.getPath('userData'), 'kaioke.sqlite'))
   sessionServer = new SessionServer({ repository })
   ipcMain.handle('app:get-version', () => app.getVersion())

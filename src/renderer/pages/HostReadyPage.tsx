@@ -13,7 +13,7 @@ export function HostReadyPage() {
   const [snapshot, setSnapshot] = useState<{ participants: Participant[]; queue: QueueItem[]; playback: { queueItemId?: string; status: 'idle' | 'loading' | 'playing' | 'paused'; positionSeconds: number; updatedAt: string }; skipVote?: { queueItemId: string; voterDeviceIds: string[]; threshold: number } }>({ participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } });
   const [queueError, setQueueError] = useState<string>();
   const [presentationMode, setPresentationMode] = useState(false);
-  const [projectionControls, setProjectionControls] = useState(false);
+  const [projectionControls, setProjectionControls] = useState(true);
 
   useEffect(() => {
     void window.kaioke.session.getState().then(setSession);
@@ -51,7 +51,13 @@ export function HostReadyPage() {
   const busy = session.phase === "starting" || session.phase === "stopping";
   const activeItem = snapshot.queue.find(item => item.id === snapshot.playback.queueItemId);
   const upcomingItems = snapshot.queue.filter(item => item.status === "queued");
+  const pendingItems = snapshot.queue.filter(item => item.status === "queued");
   const recentlyPlayed = snapshot.queue.filter(item => item.status === "played" || item.status === "skipped" || item.status === "failed").slice(-4).reverse();
+  const participantNames = Array.from(new Map(snapshot.participants
+    .map(person => person.displayName.trim())
+    .filter(Boolean)
+    .map(name => [name.toLocaleLowerCase(), name])).values());
+  const shouldAnimateParticipants = participantNames.length > 3;
   const statusText = active
     ? `Sessão aberta · ${session.participantCount} participante${session.participantCount === 1 ? "" : "s"}`
     : session.phase === "starting"
@@ -66,7 +72,12 @@ export function HostReadyPage() {
         <div className="eyebrow">
           <Radio aria-hidden="true" size={16} /> HOST LOCAL
         </div>
-        <h1 id="page-title">Kaioke</h1>
+        <div className="brand-mark">
+          <div className="brand-mark__disc" aria-hidden="true"><span /><i /></div>
+          <span className="brand-mark__orbit brand-mark__orbit--one" aria-hidden="true" />
+          <span className="brand-mark__orbit brand-mark__orbit--two" aria-hidden="true" />
+          <h1 id="page-title">Kaioke</h1>
+        </div>
         <p className="subtitle">Seu palco está pronto.</p>
         <div
           className={`status ${session.phase === "error" ? "status--error" : ""}`}
@@ -101,17 +112,29 @@ export function HostReadyPage() {
         </div>
         {presentationMode && active && session.url && (
           <section className="presentation" aria-label="Modo apresentação">
-            <div className="presentation__video">
-              <HostPlayer item={activeItem} playback={snapshot.playback} hideControls={!projectionControls} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
-              <p className="presentation__now-playing">{activeItem ? `${activeItem.title ?? activeItem.videoId}` : "Aguardando a próxima música"}</p>
-              {snapshot.skipVote && <p className="presentation__votes">Votos para pular: {snapshot.skipVote.voterDeviceIds.length}/{snapshot.skipVote.threshold}</p>}
+            <div className="presentation__stage">
+              <HostPlayer item={activeItem} playback={snapshot.playback} presentationControls={projectionControls} onTogglePresentationControls={() => setProjectionControls(value => !value)} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
             </div>
             <aside className="presentation__bottom">
-              <PresentationList title="Próximas" items={upcomingItems} empty="Nenhum pedido na fila" />
-              <PresentationList title="Tocadas" items={recentlyPlayed} empty="Ainda não há músicas tocadas" />
+              <section className="presentation__queue-panel" aria-label="Músicas da sessão">
+                <section className="presentation__current" aria-label="Tocando agora">
+                  <div className={`presentation__record ${snapshot.playback.status === "playing" ? "is-playing" : ""}`} aria-hidden="true">
+                    <span className="presentation__record-label" />
+                    <span className="presentation__record-hole" />
+                  </div>
+                  <div className="presentation__current-copy">
+                    <span className="presentation__kicker"><i aria-hidden="true" /> Tocando agora</span>
+                    <strong>{activeItem?.title ?? (activeItem ? activeItem.videoId : "Aguardando a próxima música")}</strong>
+                    <p>{activeItem?.channelName ?? activeItem?.requestedByName ?? "A fila começa assim que alguém fizer um pedido"}</p>
+                    {snapshot.skipVote && <small>Votos para pular: {snapshot.skipVote.voterDeviceIds.length}/{snapshot.skipVote.threshold}</small>}
+                  </div>
+                </section>
+                <PresentationList title="Próxima" items={upcomingItems.slice(0, 1)} empty="Nenhum pedido na fila" />
+                <PresentationList title="Última tocada" items={recentlyPlayed.slice(0, 1)} empty="Ainda não há músicas tocadas" />
+              </section>
               <section className="presentation__join">
                 {session.qrCodeDataUrl && <img src={session.qrCodeDataUrl} alt="QR code para entrar na sessão" />}
-                <p>Aponte a câmera para entrar e pedir uma música</p>
+                <p><strong>Peça sua música</strong>Aponte a câmera para entrar na fila</p>
               </section>
             </aside>
           </section>
@@ -139,12 +162,22 @@ export function HostReadyPage() {
             <HostPlayer item={activeItem} playback={snapshot.playback} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
             <p className="host-dashboard__now-playing">{activeItem ? `Tocando: ${activeItem.title ?? activeItem.videoId} · ${snapshot.playback.status}` : "Aguardando uma música"}</p>
             {snapshot.skipVote && <p className="host-dashboard__votes">Votos para pular: {snapshot.skipVote.voterDeviceIds.length}/{snapshot.skipVote.threshold}</p>}
-            <div><h2>Fila de pedidos</h2><p>{snapshot.queue.length ? `${snapshot.queue.length} música${snapshot.queue.length === 1 ? "" : "s"} aguardando` : "Aguardando pedidos"}</p></div>
+            <div className="host-dashboard__queue-heading"><h2>Fila de pedidos</h2><span aria-hidden="true">•</span><p>{pendingItems.length ? `${pendingItems.length} música${pendingItems.length === 1 ? "" : "s"} aguardando` : "Aguardando pedidos"}</p></div>
+            <div className="host-dashboard__people" aria-label={`Participantes: ${participantNames.join(", ") || "nenhum participante conectado"}`}>
+              <Users aria-hidden="true" size={16} />
+              <div className="host-dashboard__people-viewport">
+                <div aria-hidden="true" className={`host-dashboard__people-track ${shouldAnimateParticipants ? "is-moving" : ""}`}>
+                  {participantNames.length ? <>
+                    <div className="host-dashboard__people-group">{participantNames.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</div>
+                    {shouldAnimateParticipants && <div className="host-dashboard__people-group">{participantNames.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</div>}
+                  </> : <span>Nenhum participante conectado</span>}
+                </div>
+              </div>
+            </div>
             <ol className="host-dashboard__queue">
-              {snapshot.queue.map((item, index) => <li key={item.id}><div><strong>{index + 1}. {item.title ?? item.videoId}</strong><span>{item.channelName ? `${item.channelName} · ` : ""}Pedido por {item.requestedByName ?? snapshot.participants.find(person => person.deviceId === item.requestedBy)?.displayName ?? "Participante"}</span></div><div className="queue-actions"><button type="button" aria-label={`Mover ${item.title ?? item.videoId} para cima`} disabled={index === 0} onClick={() => updateQueue(window.kaioke.session.reorderQueueItem(item.id, index - 1))}><ChevronUp size={17} /></button><button type="button" aria-label={`Mover ${item.title ?? item.videoId} para baixo`} disabled={index === snapshot.queue.length - 1} onClick={() => updateQueue(window.kaioke.session.reorderQueueItem(item.id, index + 1))}><ChevronDown size={17} /></button><button type="button" aria-label={`Remover ${item.title ?? item.videoId}`} onClick={() => updateQueue(window.kaioke.session.removeQueueItem(item.id))}><Trash2 size={16} /></button></div></li>)}
+              {pendingItems.map((item, index) => <li key={item.id}><div><strong>{index + 1}. {item.title ?? item.videoId}</strong><span>{item.channelName ? `${item.channelName} · ` : ""}Pedido por {item.requestedByName ?? snapshot.participants.find(person => person.deviceId === item.requestedBy)?.displayName ?? "Participante"}</span></div><div className="queue-actions"><button type="button" aria-label={`Mover ${item.title ?? item.videoId} para cima`} disabled={index === 0} onClick={() => updateQueue(window.kaioke.session.reorderQueueItem(item.id, index - 1))}><ChevronUp size={17} /></button><button type="button" aria-label={`Mover ${item.title ?? item.videoId} para baixo`} disabled={index === pendingItems.length - 1} onClick={() => updateQueue(window.kaioke.session.reorderQueueItem(item.id, index + 1))}><ChevronDown size={17} /></button><button type="button" aria-label={`Remover ${item.title ?? item.videoId}`} onClick={() => updateQueue(window.kaioke.session.removeQueueItem(item.id))}><Trash2 size={16} /></button></div></li>)}
             </ol>
             {queueError && <p className="host-dashboard__error" role="alert">{queueError}</p>}
-            <p className="host-dashboard__people"><Users aria-hidden="true" size={16} /> {snapshot.participants.map(person => person.displayName).join(", ") || "Nenhum participante conectado"}</p>
           </section>
           </>
         )}

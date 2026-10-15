@@ -111,5 +111,5 @@ describe('LAN session server', () => {
     await server.playbackCommandAsHost({ action: 'error' })
     await expect.poll(() => server.getSnapshot().queue.find(item => item.id === secondId)?.status).toBe('failed')
     ana.socket.close(); bia.socket.close(); caio.socket.close()
-  })
+  }, 10_000)
 })

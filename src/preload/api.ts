@@ -7,6 +7,9 @@ export interface KaiokeApi {
   app: {
     getVersion: () => Promise<string>
     openExternal: (url: string) => Promise<boolean>
+    showFloatingController: () => Promise<void>
+    hideFloatingController: () => Promise<void>
+    focusMainWindow: (keepFloatingController?: boolean) => Promise<boolean>
   }
   session: {
     getState: () => Promise<HostSessionState>

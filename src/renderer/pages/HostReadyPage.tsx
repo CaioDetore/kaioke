@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, MonitorPlay, Radio, Square, Trash2, Tv, Users } from "lucide-react";
 import { Button } from "../components/Button";
 import type { HostSessionState } from "../../main/session-server";
@@ -14,6 +14,9 @@ export function HostReadyPage() {
   const [queueError, setQueueError] = useState<string>();
   const [presentationMode, setPresentationMode] = useState(false);
   const [projectionControls, setProjectionControls] = useState(true);
+  const [queueTransition, setQueueTransition] = useState<{ action: 'ended' | 'skip'; endsAt: string }>();
+  const transitionTimer = useRef<number>();
+  const isTransitioning = Boolean(snapshot.skipVote?.transitionEndsAt ?? queueTransition?.endsAt);
 
   useEffect(() => {
     void window.kaioke.session.getState().then(setSession);
@@ -35,16 +38,29 @@ export function HostReadyPage() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.key.toLowerCase() === "p") { event.preventDefault(); setPresentationMode(value => !value); }
+      if (event.key.toLowerCase() === "p" && !isTransitioning) { event.preventDefault(); setPresentationMode(value => !value); }
       if (event.key.toLowerCase() === "c" && presentationMode) { event.preventDefault(); setProjectionControls(value => !value); }
       if (event.key.toLowerCase() === "f" || event.key === "F11") { event.preventDefault(); void window.kaioke.session.toggleFullscreen(); }
-      if (event.key === "Escape" && presentationMode) setPresentationMode(false);
+      if (event.key === "Escape" && presentationMode && !isTransitioning) setPresentationMode(false);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [presentationMode]);
+  }, [isTransitioning, presentationMode]);
+
+  useEffect(() => () => { if (transitionTimer.current !== undefined) window.clearTimeout(transitionTimer.current); }, []);
 
   const active = session.phase === "accepting";
+  const startQueueTransition = useCallback((action: 'ended' | 'skip') => {
+    if (transitionTimer.current !== undefined) return;
+    const endsAt = new Date(Date.now() + 5000).toISOString();
+    setQueueTransition({ action, endsAt });
+    transitionTimer.current = window.setTimeout(() => {
+      transitionTimer.current = undefined;
+      void window.kaioke.session.playbackCommand({ action }).then(next => { setSnapshot(next); setQueueTransition(undefined); }).catch(() => setQueueTransition(undefined));
+    }, 5000);
+  }, []);
+  const transitionEndsAt = snapshot.skipVote?.transitionEndsAt ?? queueTransition?.endsAt;
+  const transitionAction = snapshot.skipVote?.transitionEndsAt ? 'skip' : queueTransition?.action;
   const updateQueue = (operation: Promise<{ participants: Participant[]; queue: QueueItem[]; playback: { queueItemId?: string; status: 'idle' | 'loading' | 'playing' | 'paused'; positionSeconds: number; updatedAt: string }; skipVote?: { queueItemId: string; voterDeviceIds: string[]; threshold: number; transitionEndsAt?: string } }>) => {
     void operation.then(next => { setSnapshot(next); setQueueError(undefined); }).catch(() => setQueueError("Não foi possível alterar a fila."));
   };
@@ -93,7 +109,7 @@ export function HostReadyPage() {
               type="button"
               variant="secondary"
               onClick={() => void window.kaioke.session.stop()}
-              disabled={busy}
+              disabled={busy || isTransitioning}
             >
               <Square aria-hidden="true" size={18} /> Encerrar sessão
             </Button>
@@ -106,14 +122,14 @@ export function HostReadyPage() {
               <MonitorPlay aria-hidden="true" size={18} /> Criar sessão
             </Button>
           )}
-          {active && <Button type="button" variant="secondary" onClick={() => setPresentationMode(value => !value)}><Tv aria-hidden="true" size={18} /> {presentationMode ? "Sair da apresentação" : "Modo apresentação"}</Button>}
+          {active && <Button type="button" variant="secondary" disabled={isTransitioning} onClick={() => setPresentationMode(value => !value)}><Tv aria-hidden="true" size={18} /> {presentationMode ? "Sair da apresentação" : "Modo apresentação"}</Button>}
           {active && <Button type="button" variant="secondary" onClick={() => setProjectionControls(value => !value)}>{projectionControls ? "Ocultar controles na projeção" : "Mostrar controles na projeção"}</Button>}
           {active && <Button type="button" variant="secondary" onClick={() => void window.kaioke.session.toggleFullscreen()}>Tela cheia</Button>}
         </div>
         {presentationMode && active && session.url && (
           <section className="presentation" aria-label="Modo apresentação">
             <div className="presentation__stage">
-              <HostPlayer item={activeItem} playback={snapshot.playback} voteTransitionEndsAt={snapshot.skipVote?.transitionEndsAt} presentationControls={projectionControls} onTogglePresentationControls={() => setProjectionControls(value => !value)} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
+              <HostPlayer item={activeItem} playback={snapshot.playback} transitionEndsAt={transitionEndsAt} transitionAction={transitionAction} onTransitionStart={startQueueTransition} presentationControls={projectionControls} onTogglePresentationControls={() => setProjectionControls(value => !value)} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
             </div>
             <aside className="presentation__bottom">
               <section className="presentation__queue-panel" aria-label="Músicas da sessão">
@@ -159,7 +175,7 @@ export function HostReadyPage() {
             </div>
           </section>
           <section className="host-dashboard" aria-label="Fila da sessão">
-            <HostPlayer item={activeItem} playback={snapshot.playback} voteTransitionEndsAt={snapshot.skipVote?.transitionEndsAt} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
+            <HostPlayer item={activeItem} playback={snapshot.playback} transitionEndsAt={transitionEndsAt} transitionAction={transitionAction} onTransitionStart={startQueueTransition} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
             <p className="host-dashboard__now-playing">{activeItem ? `Tocando: ${activeItem.title ?? activeItem.videoId} · ${snapshot.playback.status}` : "Aguardando uma música"}</p>
             {snapshot.skipVote && <p className="host-dashboard__votes">Votos para pular: {snapshot.skipVote.voterDeviceIds.length}/{snapshot.skipVote.threshold}</p>}
             <div className="host-dashboard__queue-heading"><h2>Fila de pedidos</h2><span aria-hidden="true">•</span><p>{pendingItems.length ? `${pendingItems.length} música${pendingItems.length === 1 ? "" : "s"} aguardando` : "Aguardando pedidos"}</p></div>

@@ -5,7 +5,7 @@ import type { KaiokeApi } from '../../src/preload/api'
 describe('shared contracts', () => {
   it('is available to Electron code and validates a versioned envelope', () => {
     const api: KaiokeApi = {
-      app: { getVersion: async () => '0.1.0', openExternal: async () => true },
+      app: { getVersion: async () => '0.1.0', openExternal: async () => true, showFloatingController: async () => undefined, hideFloatingController: async () => undefined, focusMainWindow: async () => true },
       session: {
         getState: async () => ({ phase: 'ready', participantCount: 0 }),
         start: async () => ({ phase: 'ready', participantCount: 0 }),

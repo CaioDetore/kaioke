@@ -5,6 +5,9 @@ const api: KaiokeApi = {
   app: {
     getVersion: () => ipcRenderer.invoke('app:get-version'),
     openExternal: url => ipcRenderer.invoke('app:open-external', url),
+    showFloatingController: () => ipcRenderer.invoke('app:show-floating-controller'),
+    hideFloatingController: () => ipcRenderer.invoke('app:hide-floating-controller'),
+    focusMainWindow: keepFloatingController => ipcRenderer.invoke('app:focus-main-window', keepFloatingController),
   },
   session: {
     getState: () => ipcRenderer.invoke('session:get-state'),

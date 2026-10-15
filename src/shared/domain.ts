@@ -30,4 +30,5 @@ export interface SkipVote {
   queueItemId: string
   voterDeviceIds: string[]
   threshold: number
+  transitionEndsAt?: string
 }

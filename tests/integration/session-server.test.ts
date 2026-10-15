@@ -106,7 +106,7 @@ describe('LAN session server', () => {
     send(ana.socket, 'skip:vote', {}, 'vote-ana')
     await expect.poll(() => server.getSnapshot().skipVote).toMatchObject({ queueItemId: firstId, threshold: 2, voterDeviceIds: ['ana'] })
     send(bia.socket, 'skip:vote', {}, 'vote-bia')
-    await expect.poll(() => server.getSnapshot().playback.queueItemId).not.toBe(firstId)
+    await expect.poll(() => server.getSnapshot().playback.queueItemId, { timeout: 6000 }).not.toBe(firstId)
     const secondId = server.getSnapshot().playback.queueItemId!
     await server.playbackCommandAsHost({ action: 'error' })
     await expect.poll(() => server.getSnapshot().queue.find(item => item.id === secondId)?.status).toBe('failed')

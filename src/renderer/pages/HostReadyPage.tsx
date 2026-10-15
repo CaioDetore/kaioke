@@ -10,7 +10,7 @@ export function HostReadyPage() {
     phase: "ready",
     participantCount: 0,
   });
-  const [snapshot, setSnapshot] = useState<{ participants: Participant[]; queue: QueueItem[]; playback: { queueItemId?: string; status: 'idle' | 'loading' | 'playing' | 'paused'; positionSeconds: number; updatedAt: string }; skipVote?: { queueItemId: string; voterDeviceIds: string[]; threshold: number } }>({ participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } });
+  const [snapshot, setSnapshot] = useState<{ participants: Participant[]; queue: QueueItem[]; playback: { queueItemId?: string; status: 'idle' | 'loading' | 'playing' | 'paused'; positionSeconds: number; updatedAt: string }; skipVote?: { queueItemId: string; voterDeviceIds: string[]; threshold: number; transitionEndsAt?: string } }>({ participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } });
   const [queueError, setQueueError] = useState<string>();
   const [presentationMode, setPresentationMode] = useState(false);
   const [projectionControls, setProjectionControls] = useState(true);
@@ -45,7 +45,7 @@ export function HostReadyPage() {
   }, [presentationMode]);
 
   const active = session.phase === "accepting";
-  const updateQueue = (operation: Promise<{ participants: Participant[]; queue: QueueItem[]; playback: { queueItemId?: string; status: 'idle' | 'loading' | 'playing' | 'paused'; positionSeconds: number; updatedAt: string }; skipVote?: { queueItemId: string; voterDeviceIds: string[]; threshold: number } }>) => {
+  const updateQueue = (operation: Promise<{ participants: Participant[]; queue: QueueItem[]; playback: { queueItemId?: string; status: 'idle' | 'loading' | 'playing' | 'paused'; positionSeconds: number; updatedAt: string }; skipVote?: { queueItemId: string; voterDeviceIds: string[]; threshold: number; transitionEndsAt?: string } }>) => {
     void operation.then(next => { setSnapshot(next); setQueueError(undefined); }).catch(() => setQueueError("Não foi possível alterar a fila."));
   };
   const busy = session.phase === "starting" || session.phase === "stopping";
@@ -113,7 +113,7 @@ export function HostReadyPage() {
         {presentationMode && active && session.url && (
           <section className="presentation" aria-label="Modo apresentação">
             <div className="presentation__stage">
-              <HostPlayer item={activeItem} playback={snapshot.playback} presentationControls={projectionControls} onTogglePresentationControls={() => setProjectionControls(value => !value)} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
+              <HostPlayer item={activeItem} playback={snapshot.playback} voteTransitionEndsAt={snapshot.skipVote?.transitionEndsAt} presentationControls={projectionControls} onTogglePresentationControls={() => setProjectionControls(value => !value)} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
             </div>
             <aside className="presentation__bottom">
               <section className="presentation__queue-panel" aria-label="Músicas da sessão">
@@ -159,7 +159,7 @@ export function HostReadyPage() {
             </div>
           </section>
           <section className="host-dashboard" aria-label="Fila da sessão">
-            <HostPlayer item={activeItem} playback={snapshot.playback} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
+            <HostPlayer item={activeItem} playback={snapshot.playback} voteTransitionEndsAt={snapshot.skipVote?.transitionEndsAt} onCommand={command => void window.kaioke.session.playbackCommand(command).then(setSnapshot)} />
             <p className="host-dashboard__now-playing">{activeItem ? `Tocando: ${activeItem.title ?? activeItem.videoId} · ${snapshot.playback.status}` : "Aguardando uma música"}</p>
             {snapshot.skipVote && <p className="host-dashboard__votes">Votos para pular: {snapshot.skipVote.voterDeviceIds.length}/{snapshot.skipVote.threshold}</p>}
             <div className="host-dashboard__queue-heading"><h2>Fila de pedidos</h2><span aria-hidden="true">•</span><p>{pendingItems.length ? `${pendingItems.length} música${pendingItems.length === 1 ? "" : "s"} aguardando` : "Aguardando pedidos"}</p></div>

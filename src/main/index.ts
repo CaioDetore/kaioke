@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, powerSaveBlocker, shell } from 'electron'
 import path from 'node:path'
 import { SessionServer } from './session-server'
 import { QueueRepository } from './queue-repository'
@@ -22,6 +22,11 @@ function createWindow(): void {
     },
   })
 
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://') || url.startsWith('http://')) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
   if (isDevelopment) void window.loadURL('http://localhost:5173')
   else void window.loadFile(path.join(__dirname, '../../dist/index.html'))
 }
@@ -31,6 +36,10 @@ app.whenReady().then(async () => {
   const repository = await QueueRepository.open(path.join(app.getPath('userData'), 'kaioke.sqlite'))
   sessionServer = new SessionServer({ repository })
   ipcMain.handle('app:get-version', () => app.getVersion())
+  ipcMain.handle('app:open-external', (_event, url: string) => {
+    if (!url.startsWith('https://') && !url.startsWith('http://')) return false
+    return shell.openExternal(url).then(() => true)
+  })
   ipcMain.handle('session:get-state', () => sessionServer.getState())
   ipcMain.handle('session:start', () => sessionServer.start())
   ipcMain.handle('session:stop', () => sessionServer.stop())
@@ -38,6 +47,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('session:remove-queue-item', (_event, queueItemId: string) => sessionServer.removeQueueItemAsHost(queueItemId))
   ipcMain.handle('session:reorder-queue-item', (_event, queueItemId: string, targetIndex: number) => sessionServer.reorderQueueAsHost(queueItemId, targetIndex))
   ipcMain.handle('session:playback-command', (_event, command) => sessionServer.playbackCommandAsHost(command))
+  ipcMain.handle('session:update-queue-item-metadata', (_event, queueItemId: string, title: string, channelName?: string) => sessionServer.updateQueueItemMetadataAsHost(queueItemId, title, channelName))
   ipcMain.handle('session:toggle-fullscreen', event => {
     const window = BrowserWindow.fromWebContents(event.sender)
     if (!window) return false

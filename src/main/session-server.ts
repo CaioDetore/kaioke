@@ -24,6 +24,8 @@ type SessionSnapshot = { revision: number; participants: Participant[]; queue: Q
 type VideoMetadata = { title: string; channelName?: string }
 type SessionServerOptions = { repository?: QueueRepository; selectIp?: () => string | undefined; resolveVideoMetadata?: (sourceUrl: string) => Promise<VideoMetadata | undefined> }
 type PlaybackCommand = { action: 'loading' | 'play' | 'pause' | 'seek' | 'ended' | 'error' | 'skip'; positionSeconds?: number }
+const pendingTitle = 'Buscando título…'
+const unavailableTitle = 'Título indisponível — será aberto no navegador padrão quando chegar a vez.'
 
 const participantPage = `<!doctype html><html lang="pt-BR"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar no Kaioke</title><style>body{font:16px system-ui;background:#0b0b12;color:#f4f1ff;margin:0;display:grid;min-height:100vh;place-items:center}main{width:min(100% - 32px,420px);padding:28px;border:1px solid #302d45;border-radius:20px;background:#151521}input,button{box-sizing:border-box;width:100%;padding:13px;margin-top:12px;border-radius:10px;font:inherit}input{border:1px solid #302d45;background:#0b0b12;color:#fff}button{border:0;background:#9566ff;color:#fff;font-weight:700}p{color:#aaa6bc}#status{min-height:24px}</style><main><h1>Kaioke</h1><p>Entre na sessão do host.</p><form><label for="name">Seu nome</label><input id="name" maxlength="48" required autocomplete="name" placeholder="Como quer aparecer?"><button>Entrar</button></form><p id="status" role="status"></p></main><script>const status=document.querySelector('#status'),form=document.querySelector('form'),name=document.querySelector('#name'),token=new URLSearchParams(location.search).get('token'),deviceId=localStorage.kaiokeDeviceId||(localStorage.kaiokeDeviceId=crypto.randomUUID());let socket,attempt=0,ended=false;form.onsubmit=e=>{e.preventDefault();ended=false;attempt=0;connect()};function connect(){if(ended)return;status.textContent=attempt?'Reconectando…':'Conectando…';socket=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host);socket.onopen=()=>socket.send(JSON.stringify({version:1,type:'session:join',payload:{token,deviceId,displayName:name.value.trim()}}));socket.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='session:snapshot'){attempt=0;status.textContent='Conectado. Aguarde a próxima música.'}else if(m.type==='session:ended'){ended=true;status.textContent='A sessão do host foi encerrada.';socket.close()}else if(m.type==='error'){ended=true;status.textContent=m.payload.message;socket.close()}};socket.onclose=()=>{if(!ended){attempt=Math.min(attempt+1,6);const delay=Math.min(1000*2**attempt,15000);status.textContent='Conexão perdida. Tentando novamente…';setTimeout(connect,delay)}};socket.onerror=()=>socket.close()}}</script></html>`
 
@@ -63,6 +65,7 @@ export class SessionServer {
   private queue: QueueItem[] = []
   private playback: PlaybackState = { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() }
   private skipVote?: SkipVote
+  private skipTransitionTimer?: ReturnType<typeof setTimeout>
   private readonly handledRequests = new Map<string, Set<string>>()
 
   constructor(private readonly options: SessionServerOptions = {}) {}
@@ -71,6 +74,15 @@ export class SessionServer {
   getSnapshot(): SessionSnapshot { return this.snapshot() }
   async playbackCommandAsHost(command: PlaybackCommand): Promise<SessionSnapshot> {
     await this.applyPlaybackCommand(command, 'host', true)
+    return this.snapshot()
+  }
+  async updateQueueItemMetadataAsHost(queueItemId: string, title: string, channelName?: string): Promise<SessionSnapshot> {
+    const item = this.queue.find(entry => entry.id === queueItemId)
+    const normalizedTitle = title.trim()
+    if (!item || !normalizedTitle) return this.snapshot()
+    item.title = normalizedTitle
+    item.channelName = channelName?.trim() || undefined
+    await this.saveAndPublishQueue()
     return this.snapshot()
   }
   async removeQueueItemAsHost(queueItemId: string): Promise<SessionSnapshot> {
@@ -120,6 +132,7 @@ export class SessionServer {
   async stop(): Promise<HostSessionState> {
     if (this.state.phase === 'ready') return this.state
     this.setState({ ...this.state, phase: 'stopping' })
+    this.clearSkipTransition()
     this.broadcast('session:ended', { message: 'A sessão do host foi encerrada.' })
     await this.options.repository?.saveQueue(this.queue)
     await this.closeServers()
@@ -174,7 +187,7 @@ export class SessionServer {
       if ('error' in normalized) { this.error(client, normalized.error, 'Informe um link ou ID do YouTube válido.'); return }
       const reason = canAddQueueItem(this.queue, participant.deviceId, normalized.videoId)
       if (reason) { this.error(client, reason, queueErrorMessage(reason)); return }
-      const item = { id: randomUUID(), ...normalized, requestedBy: participant.deviceId, requestedByName: participant.displayName, createdAt: new Date().toISOString(), status: 'queued' as const }
+      const item = { id: randomUUID(), ...normalized, title: pendingTitle, requestedBy: participant.deviceId, requestedByName: participant.displayName, createdAt: new Date().toISOString(), status: 'queued' as const }
       this.queue.push(item)
       void this.saveAndPublishQueue().then(() => this.startNextIfIdle())
       void this.enrichQueueItem(item.id, item.sourceUrl)
@@ -215,6 +228,7 @@ export class SessionServer {
       return
     }
     if (command.action === 'ended' || command.action === 'error' || command.action === 'skip') {
+      this.clearSkipTransition()
       if (active) active.status = command.action === 'ended' ? 'played' : command.action === 'error' ? 'failed' : 'skipped'
       this.playback = { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() }
       this.skipVote = undefined
@@ -230,20 +244,30 @@ export class SessionServer {
     if (!activeId) return
     const threshold = this.skipThreshold()
     const vote = this.skipVote?.queueItemId === activeId ? this.skipVote : { queueItemId: activeId, voterDeviceIds: [], threshold }
+    if (vote.transitionEndsAt) return
     if (!vote.voterDeviceIds.includes(deviceId)) vote.voterDeviceIds.push(deviceId)
     vote.threshold = threshold; this.skipVote = vote
-    if (threshold > 0 && vote.voterDeviceIds.length >= threshold) { void this.applyPlaybackCommand({ action: 'skip' }, 'host', true); return }
+    if (threshold > 0 && vote.voterDeviceIds.length >= threshold) {
+      vote.transitionEndsAt = new Date(Date.now() + 5000).toISOString()
+      this.publishSkipVote()
+      this.skipTransitionTimer = setTimeout(() => {
+        this.skipTransitionTimer = undefined
+        if (this.skipVote?.queueItemId === activeId && this.skipVote.transitionEndsAt === vote.transitionEndsAt) void this.applyPlaybackCommand({ action: 'skip' }, 'host', true)
+      }, 5000)
+      return
+    }
     this.publishSkipVote()
   }
+  private clearSkipTransition(): void { if (this.skipTransitionTimer) clearTimeout(this.skipTransitionTimer); this.skipTransitionTimer = undefined }
   private skipThreshold(): number { return Math.ceil(this.clients.size * 0.6) }
   private publishPlayback(): void { this.revision += 1; this.broadcast('playback:changed', { revision: this.revision, playback: this.playback }); this.publishSkipVote(false) }
   private publishSkipVote(increment = true): void { if (increment) this.revision += 1; if (this.skipVote) this.skipVote.threshold = this.skipThreshold(); this.broadcast('skip:changed', { revision: this.revision, skipVote: this.skipVote }) }
   private async enrichQueueItem(itemId: string, sourceUrl: string): Promise<void> {
     const metadata = await (this.options.resolveVideoMetadata ?? resolveYouTubeMetadata)(sourceUrl)
-    if (!metadata) return
     const item = this.queue.find(entry => entry.id === itemId)
     if (!item) return
-    item.title = metadata.title; item.channelName = metadata.channelName
+    if (metadata) { item.title = metadata.title; item.channelName = metadata.channelName }
+    else item.title = unavailableTitle
     await this.saveAndPublishQueue()
   }
   private error(client: WebSocket, code: string, message: string): void { this.send(client, 'error', { code, message }) }

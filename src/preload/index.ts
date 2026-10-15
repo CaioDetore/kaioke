@@ -4,6 +4,7 @@ import type { KaiokeApi } from './api'
 const api: KaiokeApi = {
   app: {
     getVersion: () => ipcRenderer.invoke('app:get-version'),
+    openExternal: url => ipcRenderer.invoke('app:open-external', url),
   },
   session: {
     getState: () => ipcRenderer.invoke('session:get-state'),
@@ -13,6 +14,7 @@ const api: KaiokeApi = {
     removeQueueItem: queueItemId => ipcRenderer.invoke('session:remove-queue-item', queueItemId),
     reorderQueueItem: (queueItemId, targetIndex) => ipcRenderer.invoke('session:reorder-queue-item', queueItemId, targetIndex),
     playbackCommand: command => ipcRenderer.invoke('session:playback-command', command),
+    updateQueueItemMetadata: (queueItemId, title, channelName) => ipcRenderer.invoke('session:update-queue-item-metadata', queueItemId, title, channelName),
     toggleFullscreen: () => ipcRenderer.invoke('session:toggle-fullscreen'),
     onStateChanged: listener => {
       const callback = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state)

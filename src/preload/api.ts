@@ -6,6 +6,7 @@ export type SessionSnapshot = { revision: number; participants: Participant[]; q
 export interface KaiokeApi {
   app: {
     getVersion: () => Promise<string>
+    openExternal: (url: string) => Promise<boolean>
   }
   session: {
     getState: () => Promise<HostSessionState>
@@ -15,6 +16,7 @@ export interface KaiokeApi {
     removeQueueItem: (queueItemId: string) => Promise<SessionSnapshot>
     reorderQueueItem: (queueItemId: string, targetIndex: number) => Promise<SessionSnapshot>
     playbackCommand: (command: { action: 'loading' | 'play' | 'pause' | 'seek' | 'ended' | 'error' | 'skip'; positionSeconds?: number }) => Promise<SessionSnapshot>
+    updateQueueItemMetadata: (queueItemId: string, title: string, channelName?: string) => Promise<SessionSnapshot>
     toggleFullscreen: () => Promise<boolean>
     onStateChanged: (listener: (state: HostSessionState) => void) => () => void
   }

@@ -5,7 +5,7 @@ import type { KaiokeApi } from '../../src/preload/api'
 describe('shared contracts', () => {
   it('is available to Electron code and validates a versioned envelope', () => {
     const api: KaiokeApi = {
-      app: { getVersion: async () => '0.1.0' },
+      app: { getVersion: async () => '0.1.0', openExternal: async () => true },
       session: {
         getState: async () => ({ phase: 'ready', participantCount: 0 }),
         start: async () => ({ phase: 'ready', participantCount: 0 }),
@@ -14,6 +14,7 @@ describe('shared contracts', () => {
         removeQueueItem: async () => ({ revision: 0, participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } }),
         reorderQueueItem: async () => ({ revision: 0, participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } }),
         playbackCommand: async () => ({ revision: 0, participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } }),
+        updateQueueItemMetadata: async () => ({ revision: 0, participants: [], queue: [], playback: { status: 'idle', positionSeconds: 0, updatedAt: new Date().toISOString() } }),
         toggleFullscreen: async () => false,
         onStateChanged: () => () => undefined,
       },
